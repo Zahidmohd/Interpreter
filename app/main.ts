@@ -39,6 +39,7 @@ interface ExprVisitor<R> {
   visitGroupingExpr(expr: Grouping): R;
   visitVariableExpr(expr: Variable): R;
   visitAssignExpr(expr: Assign): R;
+  visitLogicalExpr(expr: Logical): R;
 }
 
 class Literal extends Expr {
@@ -98,6 +99,16 @@ class Assign extends Expr {
 
   accept<R>(visitor: ExprVisitor<R>): R {
     return visitor.visitAssignExpr(this);
+  }
+}
+
+class Logical extends Expr {
+  constructor(public left: Expr, public operator: Token, public right: Expr) {
+    super();
+  }
+
+  accept<R>(visitor: ExprVisitor<R>): R {
+    return visitor.visitLogicalExpr(this);
   }
 }
 
@@ -203,6 +214,10 @@ class AstPrinter implements ExprVisitor<string> {
 
   visitAssignExpr(expr: Assign): string {
     return `(= ${expr.name.lexeme} ${expr.value.accept(this)})`;
+  }
+
+  visitLogicalExpr(expr: Logical): string {
+    return this.parenthesize(expr.operator.lexeme, expr.left, expr.right);
   }
 
   private parenthesize(name: string, ...exprs: Expr[]): string {
@@ -340,7 +355,7 @@ class Parser {
   }
 
   private assignment(): Expr {
-    const expr = this.equality();
+    const expr = this.or();
 
     if (this.match("EQUAL")) {
       const equals = this.previous();
@@ -352,6 +367,18 @@ class Parser {
       }
 
       this.error(equals, "Invalid assignment target.");
+    }
+
+    return expr;
+  }
+
+  private or(): Expr {
+    let expr = this.equality();
+
+    while (this.match("OR")) {
+      const operator = this.previous();
+      const right = this.equality();
+      expr = new Logical(expr, operator, right);
     }
 
     return expr;
