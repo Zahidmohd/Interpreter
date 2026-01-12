@@ -269,13 +269,30 @@ class Parser {
 }
 
 // Interpreter
+class RuntimeError extends Error {
+  constructor(public token: Token, message: string) {
+    super(message);
+  }
+}
+
 class Interpreter implements ExprVisitor<any> {
+  private hadRuntimeError: boolean = false;
+
   interpret(expression: Expr): any {
     try {
       return this.evaluate(expression);
     } catch (error) {
+      if (error instanceof RuntimeError) {
+        this.hadRuntimeError = true;
+        console.error(error.message);
+        console.error(`[line ${error.token.line}]`);
+      }
       return null;
     }
+  }
+
+  hasRuntimeError(): boolean {
+    return this.hadRuntimeError;
   }
 
   visitLiteralExpr(expr: Literal): any {
@@ -291,6 +308,7 @@ class Interpreter implements ExprVisitor<any> {
 
     switch (expr.operator.type) {
       case "MINUS":
+        this.checkNumberOperand(expr.operator, right);
         return -Number(right);
       case "BANG":
         return !this.isTruthy(right);
@@ -349,6 +367,11 @@ class Interpreter implements ExprVisitor<any> {
     if (a === null && b === null) return true;
     if (a === null) return false;
     return a === b;
+  }
+
+  private checkNumberOperand(operator: Token, operand: any): void {
+    if (typeof operand === "number") return;
+    throw new RuntimeError(operator, "Operand must be a number.");
   }
 
   stringify(value: any): string {
@@ -634,6 +657,11 @@ if (command === "tokenize") {
   if (expression) {
     const interpreter = new Interpreter();
     const result = interpreter.interpret(expression);
+    
+    if (interpreter.hasRuntimeError()) {
+      process.exit(70);
+    }
+    
     console.log(interpreter.stringify(result));
   }
 }
