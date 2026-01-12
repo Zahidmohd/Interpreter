@@ -410,13 +410,12 @@ const tokens = scanner.scanTokens();
 if (command === "tokenize") {
   tokens.forEach(token => {
     let literalStr = "null";
-    if (token.literal !== null && token.literal !== undefined) {
-      if (typeof token.literal === "number") {
-        literalStr = token.literal.toString();
-        if (!literalStr.includes('.')) literalStr += '.0';
-      } else {
-        literalStr = token.literal.toString();
-      }
+    // Only display literal values for NUMBER and STRING tokens
+    if (token.type === "NUMBER" && token.literal !== null) {
+      literalStr = token.literal.toString();
+      if (!literalStr.includes('.')) literalStr += '.0';
+    } else if (token.type === "STRING" && token.literal !== null) {
+      literalStr = token.literal;
     }
     console.log(`${token.type} ${token.lexeme} ${literalStr}`);
   });
