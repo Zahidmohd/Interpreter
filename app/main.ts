@@ -136,6 +136,16 @@ class Parser {
   }
 
   private expression(): Expr {
+    return this.unary();
+  }
+
+  private unary(): Expr {
+    if (this.match("BANG", "MINUS")) {
+      const operator = this.previous();
+      const right = this.unary();
+      return new Unary(operator, right);
+    }
+
     return this.primary();
   }
 
