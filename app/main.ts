@@ -108,6 +108,9 @@ class Scanner {
           this.addToken("SLASH", "/");
         }
         break;
+      case '"':
+        this.scanString();
+        break;
       case ' ':
       case '\r':
       case '\t':
@@ -121,6 +124,31 @@ class Scanner {
         this.error(this.line, `Unexpected character: ${c}`);
         break;
     }
+  }
+
+  private scanString(): void {
+    const start = this.current - 1; // Position of opening quote
+    
+    while (this.peek() !== '"' && !this.isAtEnd()) {
+      if (this.peek() === '\n') {
+        this.line++;
+      }
+      this.advance();
+    }
+    
+    if (this.isAtEnd()) {
+      this.error(this.line, "Unterminated string.");
+      return;
+    }
+    
+    // Consume closing quote
+    this.advance();
+    
+    // Extract the string value (without quotes)
+    const lexeme = this.source.substring(start, this.current);
+    const value = this.source.substring(start + 1, this.current - 1);
+    
+    this.addTokenWithLiteral("STRING", lexeme, value);
   }
 
   private match(expected: string): boolean {
@@ -146,6 +174,10 @@ class Scanner {
 
   private addToken(type: string, lexeme: string): void {
     this.tokens.push(`${type} ${lexeme} null`);
+  }
+
+  private addTokenWithLiteral(type: string, lexeme: string, literal: string): void {
+    this.tokens.push(`${type} ${lexeme} ${literal}`);
   }
 
   private error(line: number, message: string): void {
