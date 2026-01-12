@@ -122,12 +122,35 @@ class Scanner {
       default:
         if (this.isDigit(c)) {
           this.scanNumber();
+        } else if (this.isAlpha(c)) {
+          this.scanIdentifier();
         } else {
           // Unknown character - report error
           this.error(this.line, `Unexpected character: ${c}`);
         }
         break;
     }
+  }
+
+  private isAlpha(c: string): boolean {
+    return (c >= 'a' && c <= 'z') ||
+           (c >= 'A' && c <= 'Z') ||
+           c === '_';
+  }
+
+  private isAlphaNumeric(c: string): boolean {
+    return this.isAlpha(c) || this.isDigit(c);
+  }
+
+  private scanIdentifier(): void {
+    const start = this.current - 1;
+    
+    while (this.isAlphaNumeric(this.peek())) {
+      this.advance();
+    }
+    
+    const lexeme = this.source.substring(start, this.current);
+    this.addToken("IDENTIFIER", lexeme);
   }
 
   private isDigit(c: string): boolean {
