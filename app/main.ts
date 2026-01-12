@@ -1,6 +1,6 @@
 import fs from "fs";
 
-const args: string[] = process.argv.slice(2); // Skip the first two arguments (node path and script path)
+const args: string[] = process.argv.slice(2);
 
 if (args.length < 2) {
   console.error("Usage: ./your_program.sh tokenize <filename>");
@@ -14,17 +14,71 @@ if (command !== "tokenize") {
   process.exit(1);
 }
 
-// You can use print statements as follows for debugging, they'll be visible when running tests.
-console.error("Logs from your program will appear here!");
-
 const filename: string = args[1];
-
-// TODO: Uncomment the code below to pass the first stage
-//
 const fileContent: string = fs.readFileSync(filename, "utf8");
 
-if (fileContent.length !== 0) {
-  throw new Error("Scanner not implemented");
-} else {
-  console.log("EOF  null");
+// Scanner implementation
+class Scanner {
+  private source: string;
+  private tokens: string[] = [];
+  private current: number = 0;
+
+  constructor(source: string) {
+    this.source = source;
+  }
+
+  scanTokens(): void {
+    while (!this.isAtEnd()) {
+      this.scanToken();
+    }
+    this.tokens.push("EOF  null");
+  }
+
+  private scanToken(): void {
+    const c = this.advance();
+    
+    switch (c) {
+      case '(':
+        this.addToken("LEFT_PAREN", "(");
+        break;
+      case ')':
+        this.addToken("RIGHT_PAREN", ")");
+        break;
+      case '{':
+        this.addToken("LEFT_BRACE", "{");
+        break;
+      case '}':
+        this.addToken("RIGHT_BRACE", "}");
+        break;
+      case ' ':
+      case '\r':
+      case '\t':
+      case '\n':
+        // Ignore whitespace
+        break;
+      default:
+        // For now, ignore unknown characters
+        break;
+    }
+  }
+
+  private advance(): string {
+    return this.source.charAt(this.current++);
+  }
+
+  private isAtEnd(): boolean {
+    return this.current >= this.source.length;
+  }
+
+  private addToken(type: string, lexeme: string): void {
+    this.tokens.push(`${type} ${lexeme} null`);
+  }
+
+  getTokens(): string[] {
+    return this.tokens;
+  }
 }
+
+const scanner = new Scanner(fileContent);
+scanner.scanTokens();
+scanner.getTokens().forEach(token => console.log(token));
