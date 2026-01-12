@@ -136,7 +136,19 @@ class Parser {
   }
 
   private expression(): Expr {
-    return this.unary();
+    return this.factor();
+  }
+
+  private factor(): Expr {
+    let expr = this.unary();
+
+    while (this.match("STAR", "SLASH")) {
+      const operator = this.previous();
+      const right = this.unary();
+      expr = new Binary(expr, operator, right);
+    }
+
+    return expr;
   }
 
   private unary(): Expr {
