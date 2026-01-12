@@ -40,6 +40,7 @@ interface ExprVisitor<R> {
   visitVariableExpr(expr: Variable): R;
   visitAssignExpr(expr: Assign): R;
   visitLogicalExpr(expr: Logical): R;
+  visitCallExpr(expr: Call): R;
 }
 
 class Literal extends Expr {
@@ -109,6 +110,20 @@ class Logical extends Expr {
 
   accept<R>(visitor: ExprVisitor<R>): R {
     return visitor.visitLogicalExpr(this);
+  }
+}
+
+class Call extends Expr {
+  constructor(
+    public callee: Expr,
+    public paren: Token,
+    public args: Expr[]
+  ) {
+    super();
+  }
+
+  accept<R>(visitor: ExprVisitor<R>): R {
+    return visitor.visitCallExpr(this);
   }
 }
 
@@ -229,6 +244,10 @@ class AstPrinter implements ExprVisitor<string> {
 
   visitLogicalExpr(expr: Logical): string {
     return this.parenthesize(expr.operator.lexeme, expr.left, expr.right);
+  }
+
+  visitCallExpr(expr: Call): string {
+    return this.parenthesize("call", expr.callee, ...expr.args);
   }
 
   private parenthesize(name: string, ...exprs: Expr[]): string {
@@ -518,7 +537,35 @@ class Parser {
       return new Unary(operator, right);
     }
 
-    return this.primary();
+    return this.call();
+  }
+
+  private call(): Expr {
+    let expr = this.primary();
+
+    while (true) {
+      if (this.match("LEFT_PAREN")) {
+        expr = this.finishCall(expr);
+      } else {
+        break;
+      }
+    }
+
+    return expr;
+  }
+
+  private finishCall(callee: Expr): Expr {
+    const args: Expr[] = [];
+
+    if (!this.check("RIGHT_PAREN")) {
+      do {
+        args.push(this.expression());
+      } while (this.match("COMMA"));
+    }
+
+    const paren = this.consume("RIGHT_PAREN", "Expect ')' after arguments.");
+
+    return new Call(callee, paren, args);
   }
 
   private primary(): Expr {
