@@ -122,6 +122,7 @@ class AstPrinter implements ExprVisitor<string> {
 class Parser {
   private tokens: Token[];
   private current: number = 0;
+  private hadError: boolean = false;
 
   constructor(tokens: Token[]) {
     this.tokens = tokens;
@@ -133,6 +134,10 @@ class Parser {
     } catch (error) {
       return null;
     }
+  }
+
+  hasError(): boolean {
+    return this.hadError;
   }
 
   private expression(): Expr {
@@ -212,12 +217,22 @@ class Parser {
       return new Grouping(expr);
     }
 
-    throw new Error("Expect expression.");
+    throw this.error(this.peek(), "Expect expression.");
   }
 
   private consume(type: string, message: string): Token {
     if (this.check(type)) return this.advance();
-    throw new Error(message);
+    throw this.error(this.peek(), message);
+  }
+
+  private error(token: Token, message: string): Error {
+    this.hadError = true;
+    if (token.type === "EOF") {
+      console.error(`[line ${token.line}] Error at end: ${message}`);
+    } else {
+      console.error(`[line ${token.line}] Error at '${token.lexeme}': ${message}`);
+    }
+    return new Error(message);
   }
 
   private match(...types: string[]): boolean {
