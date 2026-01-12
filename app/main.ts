@@ -37,6 +37,7 @@ interface ExprVisitor<R> {
   visitUnaryExpr(expr: Unary): R;
   visitBinaryExpr(expr: Binary): R;
   visitGroupingExpr(expr: Grouping): R;
+  visitVariableExpr(expr: Variable): R;
 }
 
 class Literal extends Expr {
@@ -79,6 +80,16 @@ class Grouping extends Expr {
   }
 }
 
+class Variable extends Expr {
+  constructor(public name: Token) {
+    super();
+  }
+
+  accept<R>(visitor: ExprVisitor<R>): R {
+    return visitor.visitVariableExpr(this);
+  }
+}
+
 // Statement classes
 abstract class Stmt {
   abstract accept<R>(visitor: StmtVisitor<R>): R;
@@ -87,6 +98,7 @@ abstract class Stmt {
 interface StmtVisitor<R> {
   visitExpressionStmt(stmt: Expression): R;
   visitPrintStmt(stmt: Print): R;
+  visitVarStmt(stmt: Var): R;
 }
 
 class Expression extends Stmt {
@@ -106,6 +118,16 @@ class Print extends Stmt {
 
   accept<R>(visitor: StmtVisitor<R>): R {
     return visitor.visitPrintStmt(this);
+  }
+}
+
+class Var extends Stmt {
+  constructor(public name: Token, public initializer: Expr | null) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitVarStmt(this);
   }
 }
 
@@ -136,6 +158,10 @@ class AstPrinter implements ExprVisitor<string> {
 
   visitGroupingExpr(expr: Grouping): string {
     return this.parenthesize("group", expr.expression);
+  }
+
+  visitVariableExpr(expr: Variable): string {
+    return expr.name.lexeme;
   }
 
   private parenthesize(name: string, ...exprs: Expr[]): string {
@@ -169,10 +195,32 @@ class Parser {
   parseStatements(): Stmt[] {
     const statements: Stmt[] = [];
     while (!this.isAtEnd()) {
-      const stmt = this.statement();
+      const stmt = this.declaration();
       if (stmt) statements.push(stmt);
     }
     return statements;
+  }
+
+  private declaration(): Stmt | null {
+    try {
+      if (this.match("VAR")) return this.varDeclaration();
+      return this.statement();
+    } catch (error) {
+      this.synchronize();
+      return null;
+    }
+  }
+
+  private varDeclaration(): Stmt {
+    const name = this.consume("IDENTIFIER", "Expect variable name.");
+
+    let initializer: Expr | null = null;
+    if (this.match("EQUAL")) {
+      initializer = this.expression();
+    }
+
+    this.consume("SEMICOLON", "Expect ';' after variable declaration.");
+    return new Var(name, initializer);
   }
 
   private statement(): Stmt | null {
@@ -294,6 +342,10 @@ class Parser {
       return new Literal(this.previous().literal);
     }
 
+    if (this.match("IDENTIFIER")) {
+      return new Variable(this.previous());
+    }
+
     if (this.match("LEFT_PAREN")) {
       const expr = this.expression();
       this.consume("RIGHT_PAREN", "Expect ')' after expression.");
@@ -352,6 +404,22 @@ class Parser {
 }
 
 // Interpreter
+class Environment {
+  private values: Map<string, any> = new Map();
+
+  define(name: string, value: any): void {
+    this.values.set(name, value);
+  }
+
+  get(name: Token): any {
+    if (this.values.has(name.lexeme)) {
+      return this.values.get(name.lexeme);
+    }
+
+    throw new RuntimeError(name, `Undefined variable '${name.lexeme}'.`);
+  }
+}
+
 class RuntimeError extends Error {
   constructor(public token: Token, message: string) {
     super(message);
@@ -360,6 +428,7 @@ class RuntimeError extends Error {
 
 class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   private hadRuntimeError: boolean = false;
+  private environment: Environment = new Environment();
 
   interpret(expression: Expr): any {
     try {
@@ -401,12 +470,25 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
     console.log(this.stringify(value));
   }
 
+  visitVarStmt(stmt: Var): void {
+    let value = null;
+    if (stmt.initializer !== null) {
+      value = this.evaluate(stmt.initializer);
+    }
+
+    this.environment.define(stmt.name.lexeme, value);
+  }
+
   hasRuntimeError(): boolean {
     return this.hadRuntimeError;
   }
 
   visitLiteralExpr(expr: Literal): any {
     return expr.value;
+  }
+
+  visitVariableExpr(expr: Variable): any {
+    return this.environment.get(expr.name);
   }
 
   visitGroupingExpr(expr: Grouping): any {
