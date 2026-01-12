@@ -166,6 +166,59 @@ class Parser {
     }
   }
 
+  parseStatements(): Stmt[] {
+    const statements: Stmt[] = [];
+    while (!this.isAtEnd()) {
+      const stmt = this.statement();
+      if (stmt) statements.push(stmt);
+    }
+    return statements;
+  }
+
+  private statement(): Stmt | null {
+    try {
+      if (this.match("PRINT")) return this.printStatement();
+      return this.expressionStatement();
+    } catch (error) {
+      this.synchronize();
+      return null;
+    }
+  }
+
+  private printStatement(): Stmt {
+    const value = this.expression();
+    this.consume("SEMICOLON", "Expect ';' after value.");
+    return new Print(value);
+  }
+
+  private expressionStatement(): Stmt {
+    const expr = this.expression();
+    this.consume("SEMICOLON", "Expect ';' after expression.");
+    return new Expression(expr);
+  }
+
+  private synchronize(): void {
+    this.advance();
+
+    while (!this.isAtEnd()) {
+      if (this.previous().type === "SEMICOLON") return;
+
+      switch (this.peek().type) {
+        case "CLASS":
+        case "FUN":
+        case "VAR":
+        case "FOR":
+        case "IF":
+        case "WHILE":
+        case "PRINT":
+        case "RETURN":
+          return;
+      }
+
+      this.advance();
+    }
+  }
+
   hasError(): boolean {
     return this.hadError;
   }
@@ -305,7 +358,7 @@ class RuntimeError extends Error {
   }
 }
 
-class Interpreter implements ExprVisitor<any> {
+class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   private hadRuntimeError: boolean = false;
 
   interpret(expression: Expr): any {
@@ -319,6 +372,33 @@ class Interpreter implements ExprVisitor<any> {
       }
       return null;
     }
+  }
+
+  interpretStatements(statements: Stmt[]): void {
+    try {
+      for (const statement of statements) {
+        this.execute(statement);
+      }
+    } catch (error) {
+      if (error instanceof RuntimeError) {
+        this.hadRuntimeError = true;
+        console.error(error.message);
+        console.error(`[line ${error.token.line}]`);
+      }
+    }
+  }
+
+  private execute(stmt: Stmt): void {
+    stmt.accept(this);
+  }
+
+  visitExpressionStmt(stmt: Expression): void {
+    this.evaluate(stmt.expression);
+  }
+
+  visitPrintStmt(stmt: Print): void {
+    const value = this.evaluate(stmt.expression);
+    console.log(this.stringify(value));
   }
 
   hasRuntimeError(): boolean {
@@ -705,5 +785,23 @@ if (command === "tokenize") {
     }
     
     console.log(interpreter.stringify(result));
+  }
+} else if (command === "run") {
+  if (scanner.hasError()) {
+    process.exit(65);
+  }
+  
+  const parser = new Parser(tokens);
+  const statements = parser.parseStatements();
+  
+  if (parser.hasError()) {
+    process.exit(65);
+  }
+  
+  const interpreter = new Interpreter();
+  interpreter.interpretStatements(statements);
+  
+  if (interpreter.hasRuntimeError()) {
+    process.exit(70);
   }
 }
