@@ -268,6 +268,102 @@ class Parser {
   }
 }
 
+// Interpreter
+class Interpreter implements ExprVisitor<any> {
+  interpret(expression: Expr): any {
+    try {
+      return this.evaluate(expression);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  visitLiteralExpr(expr: Literal): any {
+    return expr.value;
+  }
+
+  visitGroupingExpr(expr: Grouping): any {
+    return this.evaluate(expr.expression);
+  }
+
+  visitUnaryExpr(expr: Unary): any {
+    const right = this.evaluate(expr.right);
+
+    switch (expr.operator.type) {
+      case "MINUS":
+        return -Number(right);
+      case "BANG":
+        return !this.isTruthy(right);
+    }
+
+    return null;
+  }
+
+  visitBinaryExpr(expr: Binary): any {
+    const left = this.evaluate(expr.left);
+    const right = this.evaluate(expr.right);
+
+    switch (expr.operator.type) {
+      case "MINUS":
+        return Number(left) - Number(right);
+      case "PLUS":
+        if (typeof left === "number" && typeof right === "number") {
+          return left + right;
+        }
+        if (typeof left === "string" && typeof right === "string") {
+          return left + right;
+        }
+        break;
+      case "SLASH":
+        return Number(left) / Number(right);
+      case "STAR":
+        return Number(left) * Number(right);
+      case "GREATER":
+        return Number(left) > Number(right);
+      case "GREATER_EQUAL":
+        return Number(left) >= Number(right);
+      case "LESS":
+        return Number(left) < Number(right);
+      case "LESS_EQUAL":
+        return Number(left) <= Number(right);
+      case "BANG_EQUAL":
+        return !this.isEqual(left, right);
+      case "EQUAL_EQUAL":
+        return this.isEqual(left, right);
+    }
+
+    return null;
+  }
+
+  private evaluate(expr: Expr): any {
+    return expr.accept(this);
+  }
+
+  private isTruthy(value: any): boolean {
+    if (value === null) return false;
+    if (typeof value === "boolean") return value;
+    return true;
+  }
+
+  private isEqual(a: any, b: any): boolean {
+    if (a === null && b === null) return true;
+    if (a === null) return false;
+    return a === b;
+  }
+
+  stringify(value: any): string {
+    if (value === null) return "nil";
+    if (typeof value === "number") {
+      let text = value.toString();
+      if (text.endsWith(".0")) {
+        text = text.substring(0, text.length - 2);
+      }
+      return text;
+    }
+    return value.toString();
+  }
+}
+
 // Scanner implementation
 class Scanner {
   private source: string;
@@ -522,5 +618,22 @@ if (command === "tokenize") {
   if (expression) {
     const printer = new AstPrinter();
     console.log(printer.print(expression));
+  }
+} else if (command === "evaluate") {
+  if (scanner.hasError()) {
+    process.exit(65);
+  }
+  
+  const parser = new Parser(tokens);
+  const expression = parser.parse();
+  
+  if (parser.hasError()) {
+    process.exit(65);
+  }
+  
+  if (expression) {
+    const interpreter = new Interpreter();
+    const result = interpreter.interpret(expression);
+    console.log(interpreter.stringify(result));
   }
 }
