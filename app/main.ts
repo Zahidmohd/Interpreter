@@ -136,7 +136,19 @@ class Parser {
   }
 
   private expression(): Expr {
-    return this.factor();
+    return this.term();
+  }
+
+  private term(): Expr {
+    let expr = this.factor();
+
+    while (this.match("PLUS", "MINUS")) {
+      const operator = this.previous();
+      const right = this.factor();
+      expr = new Binary(expr, operator, right);
+    }
+
+    return expr;
   }
 
   private factor(): Expr {
