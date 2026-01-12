@@ -120,10 +120,48 @@ class Scanner {
         this.line++;
         break;
       default:
-        // Unknown character - report error
-        this.error(this.line, `Unexpected character: ${c}`);
+        if (this.isDigit(c)) {
+          this.scanNumber();
+        } else {
+          // Unknown character - report error
+          this.error(this.line, `Unexpected character: ${c}`);
+        }
         break;
     }
+  }
+
+  private isDigit(c: string): boolean {
+    return c >= '0' && c <= '9';
+  }
+
+  private scanNumber(): void {
+    const start = this.current - 1;
+    
+    // Consume all digits
+    while (this.isDigit(this.peek())) {
+      this.advance();
+    }
+    
+    // Look for decimal point followed by digits
+    if (this.peek() === '.' && this.isDigit(this.peekNext())) {
+      // Consume the '.'
+      this.advance();
+      
+      // Consume fractional part
+      while (this.isDigit(this.peek())) {
+        this.advance();
+      }
+    }
+    
+    const lexeme = this.source.substring(start, this.current);
+    const value = parseFloat(lexeme);
+    
+    this.addTokenWithLiteral("NUMBER", lexeme, value.toString());
+  }
+
+  private peekNext(): string {
+    if (this.current + 1 >= this.source.length) return '\0';
+    return this.source.charAt(this.current + 1);
   }
 
   private scanString(): void {
