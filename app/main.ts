@@ -139,6 +139,7 @@ interface StmtVisitor<R> {
   visitBlockStmt(stmt: Block): R;
   visitIfStmt(stmt: If): R;
   visitWhileStmt(stmt: While): R;
+  visitFunctionStmt(stmt: Function): R;
 }
 
 class Expression extends Stmt {
@@ -202,6 +203,20 @@ class While extends Stmt {
 
   accept<R>(visitor: StmtVisitor<R>): R {
     return visitor.visitWhileStmt(this);
+  }
+}
+
+class Function extends Stmt {
+  constructor(
+    public name: Token,
+    public params: Token[],
+    public body: Stmt[]
+  ) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitFunctionStmt(this);
   }
 }
 
@@ -289,12 +304,31 @@ class Parser {
 
   private declaration(): Stmt | null {
     try {
+      if (this.match("FUN")) return this.function("function");
       if (this.match("VAR")) return this.varDeclaration();
       return this.statement();
     } catch (error) {
       this.synchronize();
       return null;
     }
+  }
+
+  private function(kind: string): Stmt {
+    const name = this.consume("IDENTIFIER", `Expect ${kind} name.`);
+    this.consume("LEFT_PAREN", `Expect '(' after ${kind} name.`);
+    
+    const parameters: Token[] = [];
+    if (!this.check("RIGHT_PAREN")) {
+      do {
+        parameters.push(this.consume("IDENTIFIER", "Expect parameter name."));
+      } while (this.match("COMMA"));
+    }
+    this.consume("RIGHT_PAREN", "Expect ')' after parameters.");
+
+    this.consume("LEFT_BRACE", `Expect '{' before ${kind} body.`);
+    const body = this.block();
+    
+    return new Function(name, parameters, body);
   }
 
   private varDeclaration(): Stmt {
@@ -658,6 +692,33 @@ class ClockNative implements LoxCallable {
   }
 }
 
+class LoxFunction implements LoxCallable {
+  private declaration: Function;
+
+  constructor(declaration: Function) {
+    this.declaration = declaration;
+  }
+
+  arity(): number {
+    return this.declaration.params.length;
+  }
+
+  call(interpreter: Interpreter, args: any[]): any {
+    const environment = new Environment(interpreter.globals);
+    
+    for (let i = 0; i < this.declaration.params.length; i++) {
+      environment.define(this.declaration.params[i].lexeme, args[i]);
+    }
+
+    interpreter.executeBlock(this.declaration.body, environment);
+    return null;
+  }
+
+  toString(): string {
+    return `<fn ${this.declaration.name.lexeme}>`;
+  }
+}
+
 class Environment {
   private values: Map<string, any> = new Map();
   public enclosing: Environment | null = null;
@@ -777,6 +838,11 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
     while (this.isTruthy(this.evaluate(stmt.condition))) {
       this.execute(stmt.body);
     }
+  }
+
+  visitFunctionStmt(stmt: Function): void {
+    const func = new LoxFunction(stmt);
+    this.environment.define(stmt.name.lexeme, func);
   }
 
   executeBlock(statements: Stmt[], environment: Environment): void {
