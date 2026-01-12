@@ -24,6 +24,24 @@ class Scanner {
   private current: number = 0;
   private line: number = 1;
   private hadError: boolean = false;
+  private keywords: Map<string, string> = new Map([
+    ['and', 'AND'],
+    ['class', 'CLASS'],
+    ['else', 'ELSE'],
+    ['false', 'FALSE'],
+    ['for', 'FOR'],
+    ['fun', 'FUN'],
+    ['if', 'IF'],
+    ['nil', 'NIL'],
+    ['or', 'OR'],
+    ['print', 'PRINT'],
+    ['return', 'RETURN'],
+    ['super', 'SUPER'],
+    ['this', 'THIS'],
+    ['true', 'TRUE'],
+    ['var', 'VAR'],
+    ['while', 'WHILE']
+  ]);
 
   constructor(source: string) {
     this.source = source;
@@ -150,7 +168,11 @@ class Scanner {
     }
     
     const lexeme = this.source.substring(start, this.current);
-    this.addToken("IDENTIFIER", lexeme);
+    
+    // Check if it's a keyword
+    const tokenType = this.keywords.get(lexeme) || "IDENTIFIER";
+    
+    this.addToken(tokenType, lexeme);
   }
 
   private isDigit(c: string): boolean {
