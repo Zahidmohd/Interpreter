@@ -332,7 +332,7 @@ class Interpreter implements ExprVisitor<any> {
         if (typeof left === "string" && typeof right === "string") {
           return left + right;
         }
-        break;
+        throw new RuntimeError(expr.operator, "Operands must be two numbers or two strings.");
       case "SLASH":
         this.checkNumberOperands(expr.operator, left, right);
         return Number(left) / Number(right);
