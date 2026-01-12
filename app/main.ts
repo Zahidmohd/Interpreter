@@ -156,7 +156,10 @@ class Scanner {
     const lexeme = this.source.substring(start, this.current);
     const value = parseFloat(lexeme);
     
-    this.addTokenWithLiteral("NUMBER", lexeme, value.toString());
+    // Ensure the literal always has a decimal point
+    const literal = lexeme.includes('.') ? value.toString() : value.toFixed(1);
+    
+    this.addTokenWithLiteral("NUMBER", lexeme, literal);
   }
 
   private peekNext(): string {
