@@ -136,7 +136,19 @@ class Parser {
   }
 
   private expression(): Expr {
-    return this.term();
+    return this.comparison();
+  }
+
+  private comparison(): Expr {
+    let expr = this.term();
+
+    while (this.match("GREATER", "GREATER_EQUAL", "LESS", "LESS_EQUAL")) {
+      const operator = this.previous();
+      const right = this.term();
+      expr = new Binary(expr, operator, right);
+    }
+
+    return expr;
   }
 
   private term(): Expr {
