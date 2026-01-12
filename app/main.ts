@@ -21,10 +21,10 @@ const filename: string = args[1];
 
 // TODO: Uncomment the code below to pass the first stage
 //
-// const fileContent: string = fs.readFileSync(filename, "utf8");
-//
-// if (fileContent.length !== 0) {
-//   throw new Error("Scanner not implemented");
-// } else {
-//   console.log("EOF  null");
-// }
+const fileContent: string = fs.readFileSync(filename, "utf8");
+
+if (fileContent.length !== 0) {
+  throw new Error("Scanner not implemented");
+} else {
+  console.log("EOF  null");
+}
