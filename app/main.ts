@@ -70,6 +70,34 @@ class Scanner {
       case '*':
         this.addToken("STAR", "*");
         break;
+      case '!':
+        if (this.match('=')) {
+          this.addToken("BANG_EQUAL", "!=");
+        } else {
+          this.addToken("BANG", "!");
+        }
+        break;
+      case '=':
+        if (this.match('=')) {
+          this.addToken("EQUAL_EQUAL", "==");
+        } else {
+          this.addToken("EQUAL", "=");
+        }
+        break;
+      case '<':
+        if (this.match('=')) {
+          this.addToken("LESS_EQUAL", "<=");
+        } else {
+          this.addToken("LESS", "<");
+        }
+        break;
+      case '>':
+        if (this.match('=')) {
+          this.addToken("GREATER_EQUAL", ">=");
+        } else {
+          this.addToken("GREATER", ">");
+        }
+        break;
       case ' ':
       case '\r':
       case '\t':
@@ -83,6 +111,14 @@ class Scanner {
         this.error(this.line, `Unexpected character: ${c}`);
         break;
     }
+  }
+
+  private match(expected: string): boolean {
+    if (this.isAtEnd()) return false;
+    if (this.source.charAt(this.current) !== expected) return false;
+    
+    this.current++;
+    return true;
   }
 
   private advance(): string {
