@@ -654,6 +654,16 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
     return value;
   }
 
+  visitLogicalExpr(expr: Logical): any {
+    const left = this.evaluate(expr.left);
+
+    if (expr.operator.type === "OR") {
+      if (this.isTruthy(left)) return left;
+    }
+
+    return this.evaluate(expr.right);
+  }
+
   visitGroupingExpr(expr: Grouping): any {
     return this.evaluate(expr.expression);
   }
