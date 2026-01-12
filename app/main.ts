@@ -98,6 +98,16 @@ class Scanner {
           this.addToken("GREATER", ">");
         }
         break;
+      case '/':
+        if (this.match('/')) {
+          // Comment - consume until end of line
+          while (this.peek() !== '\n' && !this.isAtEnd()) {
+            this.advance();
+          }
+        } else {
+          this.addToken("SLASH", "/");
+        }
+        break;
       case ' ':
       case '\r':
       case '\t':
@@ -119,6 +129,11 @@ class Scanner {
     
     this.current++;
     return true;
+  }
+
+  private peek(): string {
+    if (this.isAtEnd()) return '\0';
+    return this.source.charAt(this.current);
   }
 
   private advance(): string {
