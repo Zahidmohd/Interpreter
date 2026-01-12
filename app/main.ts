@@ -341,6 +341,8 @@ class Scanner {
     const text = this.source.substring(this.start, this.current);
     const tokenType = this.keywords.get(text) || "IDENTIFIER";
     
+    // Only set literal values for true, false, nil (used by parser)
+    // But these won't be displayed in tokenize output
     let literal = null;
     if (tokenType === "TRUE") literal = true;
     else if (tokenType === "FALSE") literal = false;
