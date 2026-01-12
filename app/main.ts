@@ -38,6 +38,7 @@ interface ExprVisitor<R> {
   visitBinaryExpr(expr: Binary): R;
   visitGroupingExpr(expr: Grouping): R;
   visitVariableExpr(expr: Variable): R;
+  visitAssignExpr(expr: Assign): R;
 }
 
 class Literal extends Expr {
@@ -87,6 +88,16 @@ class Variable extends Expr {
 
   accept<R>(visitor: ExprVisitor<R>): R {
     return visitor.visitVariableExpr(this);
+  }
+}
+
+class Assign extends Expr {
+  constructor(public name: Token, public value: Expr) {
+    super();
+  }
+
+  accept<R>(visitor: ExprVisitor<R>): R {
+    return visitor.visitAssignExpr(this);
   }
 }
 
@@ -164,6 +175,10 @@ class AstPrinter implements ExprVisitor<string> {
     return expr.name.lexeme;
   }
 
+  visitAssignExpr(expr: Assign): string {
+    return `(= ${expr.name.lexeme} ${expr.value.accept(this)})`;
+  }
+
   private parenthesize(name: string, ...exprs: Expr[]): string {
     let result = `(${name}`;
     for (const expr of exprs) {
@@ -224,13 +239,8 @@ class Parser {
   }
 
   private statement(): Stmt | null {
-    try {
-      if (this.match("PRINT")) return this.printStatement();
-      return this.expressionStatement();
-    } catch (error) {
-      this.synchronize();
-      return null;
-    }
+    if (this.match("PRINT")) return this.printStatement();
+    return this.expressionStatement();
   }
 
   private printStatement(): Stmt {
@@ -272,7 +282,25 @@ class Parser {
   }
 
   private expression(): Expr {
-    return this.equality();
+    return this.assignment();
+  }
+
+  private assignment(): Expr {
+    const expr = this.equality();
+
+    if (this.match("EQUAL")) {
+      const equals = this.previous();
+      const value = this.assignment(); // Right associative
+
+      if (expr instanceof Variable) {
+        const name = expr.name;
+        return new Assign(name, value);
+      }
+
+      this.error(equals, "Invalid assignment target.");
+    }
+
+    return expr;
   }
 
   private equality(): Expr {
@@ -418,6 +446,15 @@ class Environment {
 
     throw new RuntimeError(name, `Undefined variable '${name.lexeme}'.`);
   }
+
+  assign(name: Token, value: any): void {
+    if (this.values.has(name.lexeme)) {
+      this.values.set(name.lexeme, value);
+      return;
+    }
+
+    throw new RuntimeError(name, `Undefined variable '${name.lexeme}'.`);
+  }
 }
 
 class RuntimeError extends Error {
@@ -489,6 +526,12 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
 
   visitVariableExpr(expr: Variable): any {
     return this.environment.get(expr.name);
+  }
+
+  visitAssignExpr(expr: Assign): any {
+    const value = this.evaluate(expr.value);
+    this.environment.assign(expr.name, value);
+    return value;
   }
 
   visitGroupingExpr(expr: Grouping): any {
