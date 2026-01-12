@@ -123,6 +123,7 @@ interface StmtVisitor<R> {
   visitVarStmt(stmt: Var): R;
   visitBlockStmt(stmt: Block): R;
   visitIfStmt(stmt: If): R;
+  visitWhileStmt(stmt: While): R;
 }
 
 class Expression extends Stmt {
@@ -176,6 +177,16 @@ class If extends Stmt {
 
   accept<R>(visitor: StmtVisitor<R>): R {
     return visitor.visitIfStmt(this);
+  }
+}
+
+class While extends Stmt {
+  constructor(public condition: Expr, public body: Stmt) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitWhileStmt(this);
   }
 }
 
@@ -282,6 +293,7 @@ class Parser {
   private statement(): Stmt | null {
     if (this.match("IF")) return this.ifStatement();
     if (this.match("PRINT")) return this.printStatement();
+    if (this.match("WHILE")) return this.whileStatement();
     if (this.match("LEFT_BRACE")) return new Block(this.block());
     return this.expressionStatement();
   }
@@ -298,6 +310,15 @@ class Parser {
     }
 
     return new If(condition, thenBranch!, elseBranch);
+  }
+
+  private whileStatement(): Stmt {
+    this.consume("LEFT_PAREN", "Expect '(' after 'while'.");
+    const condition = this.expression();
+    this.consume("RIGHT_PAREN", "Expect ')' after condition.");
+    const body = this.statement();
+
+    return new While(condition, body!);
   }
 
   private block(): Stmt[] {
@@ -632,6 +653,12 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
       this.execute(stmt.thenBranch);
     } else if (stmt.elseBranch !== null) {
       this.execute(stmt.elseBranch);
+    }
+  }
+
+  visitWhileStmt(stmt: While): void {
+    while (this.isTruthy(this.evaluate(stmt.condition))) {
+      this.execute(stmt.body);
     }
   }
 
