@@ -323,6 +323,7 @@ class Interpreter implements ExprVisitor<any> {
 
     switch (expr.operator.type) {
       case "MINUS":
+        this.checkNumberOperands(expr.operator, left, right);
         return Number(left) - Number(right);
       case "PLUS":
         if (typeof left === "number" && typeof right === "number") {
@@ -333,16 +334,22 @@ class Interpreter implements ExprVisitor<any> {
         }
         break;
       case "SLASH":
+        this.checkNumberOperands(expr.operator, left, right);
         return Number(left) / Number(right);
       case "STAR":
+        this.checkNumberOperands(expr.operator, left, right);
         return Number(left) * Number(right);
       case "GREATER":
+        this.checkNumberOperands(expr.operator, left, right);
         return Number(left) > Number(right);
       case "GREATER_EQUAL":
+        this.checkNumberOperands(expr.operator, left, right);
         return Number(left) >= Number(right);
       case "LESS":
+        this.checkNumberOperands(expr.operator, left, right);
         return Number(left) < Number(right);
       case "LESS_EQUAL":
+        this.checkNumberOperands(expr.operator, left, right);
         return Number(left) <= Number(right);
       case "BANG_EQUAL":
         return !this.isEqual(left, right);
@@ -372,6 +379,11 @@ class Interpreter implements ExprVisitor<any> {
   private checkNumberOperand(operator: Token, operand: any): void {
     if (typeof operand === "number") return;
     throw new RuntimeError(operator, "Operand must be a number.");
+  }
+
+  private checkNumberOperands(operator: Token, left: any, right: any): void {
+    if (typeof left === "number" && typeof right === "number") return;
+    throw new RuntimeError(operator, "Operands must be numbers.");
   }
 
   stringify(value: any): string {
