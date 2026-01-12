@@ -508,8 +508,16 @@ if (command === "tokenize") {
     process.exit(65);
   }
 } else if (command === "parse") {
+  if (scanner.hasError()) {
+    process.exit(65);
+  }
+  
   const parser = new Parser(tokens);
   const expression = parser.parse();
+  
+  if (parser.hasError()) {
+    process.exit(65);
+  }
   
   if (expression) {
     const printer = new AstPrinter();
