@@ -291,11 +291,57 @@ class Parser {
   }
 
   private statement(): Stmt | null {
+    if (this.match("FOR")) return this.forStatement();
     if (this.match("IF")) return this.ifStatement();
     if (this.match("PRINT")) return this.printStatement();
     if (this.match("WHILE")) return this.whileStatement();
     if (this.match("LEFT_BRACE")) return new Block(this.block());
     return this.expressionStatement();
+  }
+
+  private forStatement(): Stmt {
+    this.consume("LEFT_PAREN", "Expect '(' after 'for'.");
+
+    // Initializer
+    let initializer: Stmt | null;
+    if (this.match("SEMICOLON")) {
+      initializer = null;
+    } else if (this.match("VAR")) {
+      initializer = this.varDeclaration();
+    } else {
+      initializer = this.expressionStatement();
+    }
+
+    // Condition
+    let condition: Expr | null = null;
+    if (!this.check("SEMICOLON")) {
+      condition = this.expression();
+    }
+    this.consume("SEMICOLON", "Expect ';' after loop condition.");
+
+    // Increment
+    let increment: Expr | null = null;
+    if (!this.check("RIGHT_PAREN")) {
+      increment = this.expression();
+    }
+    this.consume("RIGHT_PAREN", "Expect ')' after for clauses.");
+
+    // Body
+    let body = this.statement();
+
+    // Desugar to while loop
+    if (increment !== null) {
+      body = new Block([body!, new Expression(increment)]);
+    }
+
+    if (condition === null) condition = new Literal(true);
+    body = new While(condition, body!);
+
+    if (initializer !== null) {
+      body = new Block([initializer, body]);
+    }
+
+    return body;
   }
 
   private ifStatement(): Stmt {
