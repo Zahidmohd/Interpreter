@@ -22,6 +22,8 @@ class Scanner {
   private source: string;
   private tokens: string[] = [];
   private current: number = 0;
+  private line: number = 1;
+  private hadError: boolean = false;
 
   constructor(source: string) {
     this.source = source;
@@ -50,14 +52,35 @@ class Scanner {
       case '}':
         this.addToken("RIGHT_BRACE", "}");
         break;
+      case ',':
+        this.addToken("COMMA", ",");
+        break;
+      case '.':
+        this.addToken("DOT", ".");
+        break;
+      case '-':
+        this.addToken("MINUS", "-");
+        break;
+      case '+':
+        this.addToken("PLUS", "+");
+        break;
+      case ';':
+        this.addToken("SEMICOLON", ";");
+        break;
+      case '*':
+        this.addToken("STAR", "*");
+        break;
       case ' ':
       case '\r':
       case '\t':
-      case '\n':
         // Ignore whitespace
         break;
+      case '\n':
+        this.line++;
+        break;
       default:
-        // For now, ignore unknown characters
+        // Unknown character - report error
+        this.error(this.line, `Unexpected character: ${c}`);
         break;
     }
   }
@@ -74,11 +97,25 @@ class Scanner {
     this.tokens.push(`${type} ${lexeme} null`);
   }
 
+  private error(line: number, message: string): void {
+    console.error(`[line ${line}] Error: ${message}`);
+    this.hadError = true;
+  }
+
   getTokens(): string[] {
     return this.tokens;
+  }
+
+  hasError(): boolean {
+    return this.hadError;
   }
 }
 
 const scanner = new Scanner(fileContent);
 scanner.scanTokens();
 scanner.getTokens().forEach(token => console.log(token));
+
+// Exit with code 65 if there were errors
+if (scanner.hasError()) {
+  process.exit(65);
+}
