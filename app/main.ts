@@ -140,6 +140,7 @@ interface StmtVisitor<R> {
   visitIfStmt(stmt: If): R;
   visitWhileStmt(stmt: While): R;
   visitFunctionStmt(stmt: Function): R;
+  visitReturnStmt(stmt: Return): R;
 }
 
 class Expression extends Stmt {
