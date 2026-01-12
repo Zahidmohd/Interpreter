@@ -221,6 +221,16 @@ class Function extends Stmt {
   }
 }
 
+class Return extends Stmt {
+  constructor(public keyword: Token, public value: Expr | null) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitReturnStmt(this);
+  }
+}
+
 // AST Printer
 class AstPrinter implements ExprVisitor<string> {
   print(expr: Expr): string {
@@ -348,6 +358,7 @@ class Parser {
     if (this.match("FOR")) return this.forStatement();
     if (this.match("IF")) return this.ifStatement();
     if (this.match("PRINT")) return this.printStatement();
+    if (this.match("RETURN")) return this.returnStatement();
     if (this.match("WHILE")) return this.whileStatement();
     if (this.match("LEFT_BRACE")) return new Block(this.block());
     return this.expressionStatement();
@@ -437,6 +448,18 @@ class Parser {
     const value = this.expression();
     this.consume("SEMICOLON", "Expect ';' after value.");
     return new Print(value);
+  }
+
+  private returnStatement(): Stmt {
+    const keyword = this.previous();
+    let value: Expr | null = null;
+    
+    if (!this.check("SEMICOLON")) {
+      value = this.expression();
+    }
+    
+    this.consume("SEMICOLON", "Expect ';' after return value.");
+    return new Return(keyword, value);
   }
 
   private expressionStatement(): Stmt {
@@ -762,6 +785,12 @@ class Environment {
 class RuntimeError extends Error {
   constructor(public token: Token, message: string) {
     super(message);
+  }
+}
+
+class ReturnException extends Error {
+  constructor(public value: any) {
+    super();
   }
 }
 
