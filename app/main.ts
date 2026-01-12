@@ -373,9 +373,21 @@ class Parser {
   }
 
   private or(): Expr {
-    let expr = this.equality();
+    let expr = this.and();
 
     while (this.match("OR")) {
+      const operator = this.previous();
+      const right = this.and();
+      expr = new Logical(expr, operator, right);
+    }
+
+    return expr;
+  }
+
+  private and(): Expr {
+    let expr = this.equality();
+
+    while (this.match("AND")) {
       const operator = this.previous();
       const right = this.equality();
       expr = new Logical(expr, operator, right);
@@ -659,6 +671,8 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
 
     if (expr.operator.type === "OR") {
       if (this.isTruthy(left)) return left;
+    } else if (expr.operator.type === "AND") {
+      if (!this.isTruthy(left)) return left;
     }
 
     return this.evaluate(expr.right);
