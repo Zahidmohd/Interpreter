@@ -110,6 +110,7 @@ interface StmtVisitor<R> {
   visitExpressionStmt(stmt: Expression): R;
   visitPrintStmt(stmt: Print): R;
   visitVarStmt(stmt: Var): R;
+  visitBlockStmt(stmt: Block): R;
 }
 
 class Expression extends Stmt {
@@ -139,6 +140,16 @@ class Var extends Stmt {
 
   accept<R>(visitor: StmtVisitor<R>): R {
     return visitor.visitVarStmt(this);
+  }
+}
+
+class Block extends Stmt {
+  constructor(public statements: Stmt[]) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitBlockStmt(this);
   }
 }
 
@@ -240,7 +251,20 @@ class Parser {
 
   private statement(): Stmt | null {
     if (this.match("PRINT")) return this.printStatement();
+    if (this.match("LEFT_BRACE")) return new Block(this.block());
     return this.expressionStatement();
+  }
+
+  private block(): Stmt[] {
+    const statements: Stmt[] = [];
+
+    while (!this.check("RIGHT_BRACE") && !this.isAtEnd()) {
+      const stmt = this.declaration();
+      if (stmt) statements.push(stmt);
+    }
+
+    this.consume("RIGHT_BRACE", "Expect '}'.");
+    return statements;
   }
 
   private printStatement(): Stmt {
@@ -434,6 +458,11 @@ class Parser {
 // Interpreter
 class Environment {
   private values: Map<string, any> = new Map();
+  public enclosing: Environment | null = null;
+
+  constructor(enclosing: Environment | null = null) {
+    this.enclosing = enclosing;
+  }
 
   define(name: string, value: any): void {
     this.values.set(name, value);
@@ -444,12 +473,21 @@ class Environment {
       return this.values.get(name.lexeme);
     }
 
+    if (this.enclosing !== null) {
+      return this.enclosing.get(name);
+    }
+
     throw new RuntimeError(name, `Undefined variable '${name.lexeme}'.`);
   }
 
   assign(name: Token, value: any): void {
     if (this.values.has(name.lexeme)) {
       this.values.set(name.lexeme, value);
+      return;
+    }
+
+    if (this.enclosing !== null) {
+      this.enclosing.assign(name, value);
       return;
     }
 
@@ -514,6 +552,23 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
     }
 
     this.environment.define(stmt.name.lexeme, value);
+  }
+
+  visitBlockStmt(stmt: Block): void {
+    this.executeBlock(stmt.statements, new Environment(this.environment));
+  }
+
+  executeBlock(statements: Stmt[], environment: Environment): void {
+    const previous = this.environment;
+    try {
+      this.environment = environment;
+
+      for (const statement of statements) {
+        this.execute(statement);
+      }
+    } finally {
+      this.environment = previous;
+    }
   }
 
   hasRuntimeError(): boolean {
