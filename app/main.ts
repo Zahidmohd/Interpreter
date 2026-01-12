@@ -639,6 +639,25 @@ class Parser {
 }
 
 // Interpreter
+interface LoxCallable {
+  arity(): number;
+  call(interpreter: Interpreter, args: any[]): any;
+}
+
+class ClockNative implements LoxCallable {
+  arity(): number {
+    return 0;
+  }
+
+  call(interpreter: Interpreter, args: any[]): any {
+    return Date.now() / 1000;
+  }
+
+  toString(): string {
+    return "<native fn>";
+  }
+}
+
 class Environment {
   private values: Map<string, any> = new Map();
   public enclosing: Environment | null = null;
@@ -686,7 +705,12 @@ class RuntimeError extends Error {
 
 class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   private hadRuntimeError: boolean = false;
-  private environment: Environment = new Environment();
+  private globals: Environment = new Environment();
+  private environment: Environment = this.globals;
+
+  constructor() {
+    this.globals.define("clock", new ClockNative());
+  }
 
   interpret(expression: Expr): any {
     try {
@@ -796,6 +820,34 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
     }
 
     return this.evaluate(expr.right);
+  }
+
+  visitCallExpr(expr: Call): any {
+    const callee = this.evaluate(expr.callee);
+
+    const args: any[] = [];
+    for (const argument of expr.args) {
+      args.push(this.evaluate(argument));
+    }
+
+    if (!this.isCallable(callee)) {
+      throw new RuntimeError(expr.paren, "Can only call functions and classes.");
+    }
+
+    const func: LoxCallable = callee as LoxCallable;
+    
+    if (args.length !== func.arity()) {
+      throw new RuntimeError(
+        expr.paren,
+        `Expected ${func.arity()} arguments but got ${args.length}.`
+      );
+    }
+
+    return func.call(this, args);
+  }
+
+  private isCallable(value: any): boolean {
+    return value && typeof value === "object" && "call" in value && "arity" in value;
   }
 
   visitGroupingExpr(expr: Grouping): any {
