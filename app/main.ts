@@ -9,7 +9,7 @@ if (args.length < 2) {
 
 const command: string = args[0];
 
-if (command !== "tokenize" && command !== "parse") {
+if (command !== "tokenize" && command !== "parse" && command !== "evaluate") {
   console.error(`Usage: Unknown command: ${command}`);
   process.exit(1);
 }
