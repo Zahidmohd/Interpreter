@@ -111,6 +111,7 @@ interface StmtVisitor<R> {
   visitPrintStmt(stmt: Print): R;
   visitVarStmt(stmt: Var): R;
   visitBlockStmt(stmt: Block): R;
+  visitIfStmt(stmt: If): R;
 }
 
 class Expression extends Stmt {
@@ -150,6 +151,20 @@ class Block extends Stmt {
 
   accept<R>(visitor: StmtVisitor<R>): R {
     return visitor.visitBlockStmt(this);
+  }
+}
+
+class If extends Stmt {
+  constructor(
+    public condition: Expr,
+    public thenBranch: Stmt,
+    public elseBranch: Stmt | null
+  ) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitIfStmt(this);
   }
 }
 
@@ -250,9 +265,24 @@ class Parser {
   }
 
   private statement(): Stmt | null {
+    if (this.match("IF")) return this.ifStatement();
     if (this.match("PRINT")) return this.printStatement();
     if (this.match("LEFT_BRACE")) return new Block(this.block());
     return this.expressionStatement();
+  }
+
+  private ifStatement(): Stmt {
+    this.consume("LEFT_PAREN", "Expect '(' after 'if'.");
+    const condition = this.expression();
+    this.consume("RIGHT_PAREN", "Expect ')' after if condition.");
+
+    const thenBranch = this.statement();
+    let elseBranch: Stmt | null = null;
+    if (this.match("ELSE")) {
+      elseBranch = this.statement();
+    }
+
+    return new If(condition, thenBranch!, elseBranch);
   }
 
   private block(): Stmt[] {
@@ -556,6 +586,14 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
 
   visitBlockStmt(stmt: Block): void {
     this.executeBlock(stmt.statements, new Environment(this.environment));
+  }
+
+  visitIfStmt(stmt: If): void {
+    if (this.isTruthy(this.evaluate(stmt.condition))) {
+      this.execute(stmt.thenBranch);
+    } else if (stmt.elseBranch !== null) {
+      this.execute(stmt.elseBranch);
+    }
   }
 
   executeBlock(statements: Stmt[], environment: Environment): void {
