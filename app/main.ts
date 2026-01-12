@@ -148,7 +148,18 @@ class Parser {
       return new Literal(this.previous().literal);
     }
 
+    if (this.match("LEFT_PAREN")) {
+      const expr = this.expression();
+      this.consume("RIGHT_PAREN", "Expect ')' after expression.");
+      return new Grouping(expr);
+    }
+
     throw new Error("Expect expression.");
+  }
+
+  private consume(type: string, message: string): Token {
+    if (this.check(type)) return this.advance();
+    throw new Error(message);
   }
 
   private match(...types: string[]): boolean {
