@@ -9,7 +9,7 @@ if (args.length < 2) {
 
 const command: string = args[0];
 
-if (command !== "tokenize" && command !== "parse" && command !== "evaluate") {
+if (command !== "tokenize" && command !== "parse" && command !== "evaluate" && command !== "run") {
   console.error(`Usage: Unknown command: ${command}`);
   process.exit(1);
 }
@@ -76,6 +76,36 @@ class Grouping extends Expr {
 
   accept<R>(visitor: ExprVisitor<R>): R {
     return visitor.visitGroupingExpr(this);
+  }
+}
+
+// Statement classes
+abstract class Stmt {
+  abstract accept<R>(visitor: StmtVisitor<R>): R;
+}
+
+interface StmtVisitor<R> {
+  visitExpressionStmt(stmt: Expression): R;
+  visitPrintStmt(stmt: Print): R;
+}
+
+class Expression extends Stmt {
+  constructor(public expression: Expr) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitExpressionStmt(this);
+  }
+}
+
+class Print extends Stmt {
+  constructor(public expression: Expr) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitPrintStmt(this);
   }
 }
 
