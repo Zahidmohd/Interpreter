@@ -1053,7 +1053,8 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     this.scopes[this.scopes.length - 1].set("this", true);
 
     for (const method of stmt.methods) {
-      this.resolveFunction(method, "method");
+      const declaration = method.name.lexeme === "init" ? "initializer" : "method";
+      this.resolveFunction(method, declaration);
     }
 
     this.endScope();
@@ -1078,9 +1079,13 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
 
   visitReturnStmt(stmt: Return): void {
     if (this.currentFunction === "none") {
-      this.error(stmt.keyword, "Can't return from top-level code.");  // ✅ ADD THIS LINE
+      this.error(stmt.keyword, "Can't return from top-level code.");
     }
+
     if (stmt.value !== null) {
+      if (this.currentFunction === "initializer") {
+        this.error(stmt.keyword, "Can't return a value from an initializer.");
+      }
       this.resolveExpr(stmt.value);
     }
   }
