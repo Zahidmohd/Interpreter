@@ -786,10 +786,12 @@ class ClockNative implements LoxCallable {
 class LoxFunction implements LoxCallable {
   private declaration: Function;
   private closure: Environment;
+  private isInitializer: boolean;
 
-  constructor(declaration: Function, closure: Environment) {
+  constructor(declaration: Function, closure: Environment, isInitializer: boolean = false) {
     this.declaration = declaration;
     this.closure = closure;
+    this.isInitializer = isInitializer;
   }
 
   arity(): number {
@@ -798,7 +800,7 @@ class LoxFunction implements LoxCallable {
   bind(instance: LoxInstance): LoxFunction {
     const environment = new Environment(this.closure);
     environment.define("this", instance);
-    return new LoxFunction(this.declaration, environment);
+    return new LoxFunction(this.declaration, environment, this.isInitializer);
   }
 
   call(interpreter: Interpreter, args: any[]): any {
@@ -812,11 +814,13 @@ class LoxFunction implements LoxCallable {
       interpreter.executeBlock(this.declaration.body, environment);
     } catch (returnValue) {
       if (returnValue instanceof ReturnException) {
+        if (this.isInitializer) return this.closure.getAt(0, "this");
         return returnValue.value;
       }
       throw returnValue;
     }
 
+    if (this.isInitializer) return this.closure.getAt(0, "this");
     return null;
   }
 
@@ -841,10 +845,20 @@ class LoxClass implements LoxCallable {
 
   call(interpreter: Interpreter, args: any[]): any {
     const instance = new LoxInstance(this);
+
+    const initializer = this.findMethod("init");
+    if (initializer !== null) {
+      initializer.bind(instance).call(interpreter, args);
+    }
+
     return instance;
   }
 
   arity(): number {
+    const initializer = this.findMethod("init");
+    if (initializer !== null) {
+      return initializer.arity();
+    }
     return 0;
   }
 
@@ -1047,8 +1061,8 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     this.currentClass = enclosingClass;
   }
   visitExpressionStmt(stmt: Expression): void {
-  this.resolveExpr(stmt.expression);
-}
+    this.resolveExpr(stmt.expression);
+  }
 
   visitIfStmt(stmt: If): void {
     this.resolveExpr(stmt.condition);
@@ -1254,7 +1268,8 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
 
     const methods = new Map<string, LoxFunction>();
     for (const method of stmt.methods) {
-      const func = new LoxFunction(method, this.environment);
+      const isInitializer = method.name.lexeme === "init";
+      const func = new LoxFunction(method, this.environment, isInitializer);
       methods.set(method.name.lexeme, func);
     }
 
