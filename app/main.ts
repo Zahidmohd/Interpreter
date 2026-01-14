@@ -24,7 +24,7 @@ class Token {
     public lexeme: string,
     public literal: any,
     public line: number
-  ) {}
+  ) { }
 }
 
 // AST Expression classes
@@ -327,7 +327,7 @@ class Parser {
   private function(kind: string): Stmt {
     const name = this.consume("IDENTIFIER", `Expect ${kind} name.`);
     this.consume("LEFT_PAREN", `Expect '(' after ${kind} name.`);
-    
+
     const parameters: Token[] = [];
     if (!this.check("RIGHT_PAREN")) {
       do {
@@ -338,7 +338,7 @@ class Parser {
 
     this.consume("LEFT_BRACE", `Expect '{' before ${kind} body.`);
     const body = this.block();
-    
+
     return new Function(name, parameters, body);
   }
 
@@ -453,11 +453,11 @@ class Parser {
   private returnStatement(): Stmt {
     const keyword = this.previous();
     let value: Expr | null = null;
-    
+
     if (!this.check("SEMICOLON")) {
       value = this.expression();
     }
-    
+
     this.consume("SEMICOLON", "Expect ';' after return value.");
     return new Return(keyword, value);
   }
@@ -718,9 +718,11 @@ class ClockNative implements LoxCallable {
 
 class LoxFunction implements LoxCallable {
   private declaration: Function;
+  private closure: Environment;
 
-  constructor(declaration: Function) {
+  constructor(declaration: Function, closure: Environment) {
     this.declaration = declaration;
+    this.closure = closure;
   }
 
   arity(): number {
@@ -728,8 +730,8 @@ class LoxFunction implements LoxCallable {
   }
 
   call(interpreter: Interpreter, args: any[]): any {
-    const environment = new Environment(interpreter.globals);
-    
+    const environment = new Environment(this.closure);
+
     for (let i = 0; i < this.declaration.params.length; i++) {
       environment.define(this.declaration.params[i].lexeme, args[i]);
     }
@@ -742,7 +744,7 @@ class LoxFunction implements LoxCallable {
       }
       throw returnValue;
     }
-    
+
     return null;
   }
 
@@ -879,7 +881,7 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   }
 
   visitFunctionStmt(stmt: Function): void {
-    const func = new LoxFunction(stmt);
+    const func = new LoxFunction(stmt, this.environment);
     this.environment.define(stmt.name.lexeme, func);
   }
 
@@ -948,7 +950,7 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
     }
 
     const func: LoxCallable = callee as LoxCallable;
-    
+
     if (args.length !== func.arity()) {
       throw new RuntimeError(
         expr.paren,
@@ -1105,7 +1107,7 @@ class Scanner {
 
   private scanToken(): void {
     const c = this.advance();
-    
+
     switch (c) {
       case '(':
         this.addToken("LEFT_PAREN");
@@ -1185,12 +1187,12 @@ class Scanner {
       if (this.peek() === '\n') this.line++;
       this.advance();
     }
-    
+
     if (this.isAtEnd()) {
       this.error(this.line, "Unterminated string.");
       return;
     }
-    
+
     this.advance();
     const value = this.source.substring(this.start + 1, this.current - 1);
     this.addToken("STRING", value);
@@ -1200,14 +1202,14 @@ class Scanner {
     while (this.isDigit(this.peek())) {
       this.advance();
     }
-    
+
     if (this.peek() === '.' && this.isDigit(this.peekNext())) {
       this.advance();
       while (this.isDigit(this.peek())) {
         this.advance();
       }
     }
-    
+
     const value = parseFloat(this.source.substring(this.start, this.current));
     this.addToken("NUMBER", value);
   }
@@ -1216,17 +1218,17 @@ class Scanner {
     while (this.isAlphaNumeric(this.peek())) {
       this.advance();
     }
-    
+
     const text = this.source.substring(this.start, this.current);
     const tokenType = this.keywords.get(text) || "IDENTIFIER";
-    
+
     // Only set literal values for true, false, nil (used by parser)
     // But these won't be displayed in tokenize output
     let literal = null;
     if (tokenType === "TRUE") literal = true;
     else if (tokenType === "FALSE") literal = false;
     else if (tokenType === "NIL") literal = null;
-    
+
     this.addToken(tokenType, literal);
   }
 
@@ -1298,7 +1300,7 @@ if (command === "tokenize") {
     }
     console.log(`${token.type} ${token.lexeme} ${literalStr}`);
   });
-  
+
   if (scanner.hasError()) {
     process.exit(65);
   }
@@ -1306,14 +1308,14 @@ if (command === "tokenize") {
   if (scanner.hasError()) {
     process.exit(65);
   }
-  
+
   const parser = new Parser(tokens);
   const expression = parser.parse();
-  
+
   if (parser.hasError()) {
     process.exit(65);
   }
-  
+
   if (expression) {
     const printer = new AstPrinter();
     console.log(printer.print(expression));
@@ -1322,39 +1324,39 @@ if (command === "tokenize") {
   if (scanner.hasError()) {
     process.exit(65);
   }
-  
+
   const parser = new Parser(tokens);
   const expression = parser.parse();
-  
+
   if (parser.hasError()) {
     process.exit(65);
   }
-  
+
   if (expression) {
     const interpreter = new Interpreter();
     const result = interpreter.interpret(expression);
-    
+
     if (interpreter.hasRuntimeError()) {
       process.exit(70);
     }
-    
+
     console.log(interpreter.stringify(result));
   }
 } else if (command === "run") {
   if (scanner.hasError()) {
     process.exit(65);
   }
-  
+
   const parser = new Parser(tokens);
   const statements = parser.parseStatements();
-  
+
   if (parser.hasError()) {
     process.exit(65);
   }
-  
+
   const interpreter = new Interpreter();
   interpreter.interpretStatements(statements);
-  
+
   if (interpreter.hasRuntimeError()) {
     process.exit(70);
   }
