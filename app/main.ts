@@ -778,14 +778,34 @@ class LoxFunction implements LoxCallable {
   }
 }
 
-class LoxClass {
+class LoxClass implements LoxCallable {
   constructor(public name: string) { }
+
+  call(interpreter: Interpreter, args: any[]): any {
+    const instance = new LoxInstance(this);
+    return instance;
+  }
+
+  arity(): number {
+    return 0;
+  }
 
   toString(): string {
     return this.name;
   }
 }
 
+class LoxInstance {
+  private klass: LoxClass;
+
+  constructor(klass: LoxClass) {
+    this.klass = klass;
+  }
+
+  toString(): string {
+    return `${this.klass.name} instance`;
+  }
+}
 
 
 class Environment {
