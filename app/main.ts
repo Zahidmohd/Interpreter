@@ -807,7 +807,18 @@ class LoxFunction implements LoxCallable {
 }
 
 class LoxClass implements LoxCallable {
-  constructor(public name: string) { }
+  public methods: Map<string, LoxFunction>;
+
+  constructor(public name: string, methods: Map<string, LoxFunction>) {
+    this.methods = methods;
+  }
+
+  findMethod(name: string): LoxFunction | null {
+    if (this.methods.has(name)) {
+      return this.methods.get(name)!;
+    }
+    return null;
+  }
 
   call(interpreter: Interpreter, args: any[]): any {
     const instance = new LoxInstance(this);
@@ -832,12 +843,17 @@ class LoxInstance {
   }
 
   get(name: Token): any {
-    if (this.fields.has(name.lexeme)) {
-      return this.fields.get(name.lexeme);
-    }
-
-    throw new RuntimeError(name, `Undefined property '${name.lexeme}'.`);
+  if (this.fields.has(name.lexeme)) {
+    return this.fields.get(name.lexeme);
   }
+
+  const method = this.klass.findMethod(name.lexeme);
+  if (method !== null) {
+    return method;
+  }
+
+  throw new RuntimeError(name, `Undefined property '${name.lexeme}'.`);
+}
 
   set(name: Token, value: any): void {
     this.fields.set(name.lexeme, value);
@@ -985,9 +1001,13 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
   }
 
   visitClassStmt(stmt: Class): void {
-    this.declare(stmt.name);
-    this.define(stmt.name);
+  this.declare(stmt.name);
+  this.define(stmt.name);
+
+  for (const method of stmt.methods) {
+    this.resolveFunction(method, "method");
   }
+}
 
   visitExpressionStmt(stmt: Expression): void {
     this.resolveExpr(stmt.expression);
@@ -1193,10 +1213,17 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   }
 
   visitClassStmt(stmt: Class): void {
-    this.environment.define(stmt.name.lexeme, null);
-    const klass = new LoxClass(stmt.name.lexeme);
-    this.environment.assign(stmt.name, klass);
+  this.environment.define(stmt.name.lexeme, null);
+
+  const methods = new Map<string, LoxFunction>();
+  for (const method of stmt.methods) {
+    const func = new LoxFunction(method, this.environment);
+    methods.set(method.name.lexeme, func);
   }
+
+  const klass = new LoxClass(stmt.name.lexeme, methods);
+  this.environment.assign(stmt.name, klass);
+}
 
   visitReturnStmt(stmt: Return): void {
     let value = null;
