@@ -43,6 +43,7 @@ interface ExprVisitor<R> {
   visitCallExpr(expr: Call): R;
   visitGetExpr(expr: Get): R;
   visitSetExpr(expr: Set): R;
+  visitThisExpr(expr: This): R;
 }
 
 class Literal extends Expr {
@@ -92,6 +93,16 @@ class Variable extends Expr {
 
   accept<R>(visitor: ExprVisitor<R>): R {
     return visitor.visitVariableExpr(this);
+  }
+}
+
+class This extends Expr {
+  constructor(public keyword: Token) {
+    super();
+  }
+
+  accept<R>(visitor: ExprVisitor<R>): R {
+    return visitor.visitThisExpr(this);
   }
 }
 
@@ -687,6 +698,9 @@ class Parser {
     if (this.match("NUMBER", "STRING")) {
       return new Literal(this.previous().literal);
     }
+    if (this.match("THIS")) {
+      return new This(this.previous());
+    }
 
     if (this.match("IDENTIFIER")) {
       return new Variable(this.previous());
@@ -781,6 +795,11 @@ class LoxFunction implements LoxCallable {
   arity(): number {
     return this.declaration.params.length;
   }
+  bind(instance: LoxInstance): LoxFunction {
+    const environment = new Environment(this.closure);
+    environment.define("this", instance);
+    return new LoxFunction(this.declaration, environment);
+  }
 
   call(interpreter: Interpreter, args: any[]): any {
     const environment = new Environment(this.closure);
@@ -843,17 +862,17 @@ class LoxInstance {
   }
 
   get(name: Token): any {
-  if (this.fields.has(name.lexeme)) {
-    return this.fields.get(name.lexeme);
-  }
+    if (this.fields.has(name.lexeme)) {
+      return this.fields.get(name.lexeme);
+    }
 
-  const method = this.klass.findMethod(name.lexeme);
-  if (method !== null) {
-    return method;
-  }
+    const method = this.klass.findMethod(name.lexeme);
+    if (method !== null) {
+      return method.bind(this);  // ✅ Returns bound method with 'this'
+    }
 
-  throw new RuntimeError(name, `Undefined property '${name.lexeme}'.`);
-}
+    throw new RuntimeError(name, `Undefined property '${name.lexeme}'.`);
+  }
 
   set(name: Token, value: any): void {
     this.fields.set(name.lexeme, value);
@@ -989,6 +1008,10 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     this.resolveLocal(expr, expr.name);
   }
 
+  visitThisExpr(expr: This): void {
+    this.resolveLocal(expr, expr.keyword);
+  }
+
   visitAssignExpr(expr: Assign): void {
     this.resolveExpr(expr.value);
     this.resolveLocal(expr, expr.name);
@@ -1001,14 +1024,18 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
   }
 
   visitClassStmt(stmt: Class): void {
-  this.declare(stmt.name);
-  this.define(stmt.name);
+    this.declare(stmt.name);
+    this.define(stmt.name);
 
-  for (const method of stmt.methods) {
-    this.resolveFunction(method, "method");
+    this.beginScope();
+    this.scopes[this.scopes.length - 1].set("this", true);
+
+    for (const method of stmt.methods) {
+      this.resolveFunction(method, "method");
+    }
+
+    this.endScope();
   }
-}
-
   visitExpressionStmt(stmt: Expression): void {
     this.resolveExpr(stmt.expression);
   }
@@ -1213,17 +1240,17 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   }
 
   visitClassStmt(stmt: Class): void {
-  this.environment.define(stmt.name.lexeme, null);
+    this.environment.define(stmt.name.lexeme, null);
 
-  const methods = new Map<string, LoxFunction>();
-  for (const method of stmt.methods) {
-    const func = new LoxFunction(method, this.environment);
-    methods.set(method.name.lexeme, func);
+    const methods = new Map<string, LoxFunction>();
+    for (const method of stmt.methods) {
+      const func = new LoxFunction(method, this.environment);
+      methods.set(method.name.lexeme, func);
+    }
+
+    const klass = new LoxClass(stmt.name.lexeme, methods);
+    this.environment.assign(stmt.name, klass);
   }
-
-  const klass = new LoxClass(stmt.name.lexeme, methods);
-  this.environment.assign(stmt.name, klass);
-}
 
   visitReturnStmt(stmt: Return): void {
     let value = null;
@@ -1261,6 +1288,10 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
 
   visitVariableExpr(expr: Variable): any {
     return this.lookUpVariable(expr.name, expr);
+  }
+
+  visitThisExpr(expr: This): any {
+    return this.lookUpVariable(expr.keyword, expr);
   }
 
   private lookUpVariable(name: Token, expr: Expr): any {
@@ -1320,25 +1351,25 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   }
 
   visitGetExpr(expr: Get): any {
-  const object = this.evaluate(expr.object);
-  if (object instanceof LoxInstance) {
-    return object.get(expr.name);
+    const object = this.evaluate(expr.object);
+    if (object instanceof LoxInstance) {
+      return object.get(expr.name);
+    }
+
+    throw new RuntimeError(expr.name, "Only instances have properties.");
   }
 
-  throw new RuntimeError(expr.name, "Only instances have properties.");
-}
+  visitSetExpr(expr: Set): any {
+    const object = this.evaluate(expr.object);
 
-visitSetExpr(expr: Set): any {
-  const object = this.evaluate(expr.object);
+    if (!(object instanceof LoxInstance)) {
+      throw new RuntimeError(expr.name, "Only instances have fields.");
+    }
 
-  if (!(object instanceof LoxInstance)) {
-    throw new RuntimeError(expr.name, "Only instances have fields.");
+    const value = this.evaluate(expr.value);
+    object.set(expr.name, value);
+    return value;
   }
-
-  const value = this.evaluate(expr.value);
-  object.set(expr.name, value);
-  return value;
-}
 
   private isCallable(value: any): boolean {
     return value && typeof value === "object" && "call" in value && "arity" in value;
