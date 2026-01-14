@@ -734,7 +734,15 @@ class LoxFunction implements LoxCallable {
       environment.define(this.declaration.params[i].lexeme, args[i]);
     }
 
-    interpreter.executeBlock(this.declaration.body, environment);
+    try {
+      interpreter.executeBlock(this.declaration.body, environment);
+    } catch (returnValue) {
+      if (returnValue instanceof ReturnException) {
+        return returnValue.value;
+      }
+      throw returnValue;
+    }
+    
     return null;
   }
 
@@ -873,6 +881,15 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   visitFunctionStmt(stmt: Function): void {
     const func = new LoxFunction(stmt);
     this.environment.define(stmt.name.lexeme, func);
+  }
+
+  visitReturnStmt(stmt: Return): void {
+    let value = null;
+    if (stmt.value !== null) {
+      value = this.evaluate(stmt.value);
+    }
+
+    throw new ReturnException(value);
   }
 
   executeBlock(statements: Stmt[], environment: Environment): void {
