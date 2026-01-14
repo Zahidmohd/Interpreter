@@ -141,6 +141,7 @@ interface StmtVisitor<R> {
   visitWhileStmt(stmt: While): R;
   visitFunctionStmt(stmt: Function): R;
   visitReturnStmt(stmt: Return): R;
+  visitClassStmt(stmt: Class): R;
 }
 
 class Expression extends Stmt {
@@ -231,6 +232,16 @@ class Return extends Stmt {
   }
 }
 
+class Class extends Stmt {
+  constructor(public name: Token, public methods: Function[]) {
+    super();
+  }
+
+  accept<R>(visitor: StmtVisitor<R>): R {
+    return visitor.visitClassStmt(this);
+  }
+}
+
 // AST Printer
 class AstPrinter implements ExprVisitor<string> {
   print(expr: Expr): string {
@@ -315,6 +326,7 @@ class Parser {
 
   private declaration(): Stmt | null {
     try {
+      if (this.match("CLASS")) return this.classDeclaration();  // ✅ ADD THIS LINE
       if (this.match("FUN")) return this.function("function");
       if (this.match("VAR")) return this.varDeclaration();
       return this.statement();
@@ -340,6 +352,19 @@ class Parser {
     const body = this.block();
 
     return new Function(name, parameters, body);
+  }
+
+  private classDeclaration(): Stmt {
+    const name = this.consume("IDENTIFIER", "Expect class name.");
+    this.consume("LEFT_BRACE", "Expect '{' before class body.");
+
+    const methods: Function[] = [];
+    while (!this.check("RIGHT_BRACE") && !this.isAtEnd()) {
+      methods.push(this.function("method"));
+    }
+
+    this.consume("RIGHT_BRACE", "Expect '}' after class body.");
+    return new Class(name, methods);
   }
 
   private varDeclaration(): Stmt {
@@ -753,6 +778,16 @@ class LoxFunction implements LoxCallable {
   }
 }
 
+class LoxClass {
+  constructor(public name: string) { }
+
+  toString(): string {
+    return this.name;
+  }
+}
+
+
+
 class Environment {
   private values: Map<string, any> = new Map();
   public enclosing: Environment | null = null;
@@ -886,6 +921,11 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     this.declare(stmt.name);
     this.define(stmt.name);
     this.resolveFunction(stmt, "function");
+  }
+
+  visitClassStmt(stmt: Class): void {
+    this.declare(stmt.name);
+    this.define(stmt.name);
   }
 
   visitExpressionStmt(stmt: Expression): void {
@@ -1078,6 +1118,12 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   visitFunctionStmt(stmt: Function): void {
     const func = new LoxFunction(stmt, this.environment);
     this.environment.define(stmt.name.lexeme, func);
+  }
+
+  visitClassStmt(stmt: Class): void {
+    this.environment.define(stmt.name.lexeme, null);
+    const klass = new LoxClass(stmt.name.lexeme);
+    this.environment.assign(stmt.name, klass);
   }
 
   visitReturnStmt(stmt: Return): void {
