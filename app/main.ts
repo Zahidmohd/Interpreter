@@ -973,6 +973,11 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
   private declare(name: Token): void {
     if (this.scopes.length === 0) return;
     const scope = this.scopes[this.scopes.length - 1];
+
+    if (scope.has(name.lexeme)) {
+      this.error(name, "Already a variable with this name in this scope.");
+    }
+
     scope.set(name.lexeme, false);
   }
 
