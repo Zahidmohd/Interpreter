@@ -825,6 +825,7 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
   private interpreter: Interpreter;
   private scopes: Map<string, boolean>[] = [];
   private currentFunction: string = "none";
+  private hadError: boolean = false;
 
   constructor(interpreter: Interpreter) {
     this.interpreter = interpreter;
@@ -834,6 +835,14 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     for (const statement of statements) {
       this.resolveStmt(statement);
     }
+  }
+  hasError(): boolean {
+    return this.hadError;
+  }
+
+  private error(token: Token, message: string): void {
+    this.hadError = true;
+    console.error(`[line ${token.line}] Error at '${token.lexeme}': ${message}`);
   }
 
   private resolveStmt(stmt: Stmt): void {
@@ -862,7 +871,7 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     if (this.scopes.length > 0) {
       const scope = this.scopes[this.scopes.length - 1];
       if (scope.has(expr.name.lexeme) && scope.get(expr.name.lexeme) === false) {
-        // Error: variable used in its own initializer
+        this.error(expr.name, "Can't read local variable in its own initializer.");  // ✅ ADD THIS
       }
     }
     this.resolveLocal(expr, expr.name);
@@ -1555,8 +1564,12 @@ if (command === "tokenize") {
 
   const interpreter = new Interpreter();
 
-  const resolver = new Resolver(interpreter);      // ✅ ADD THIS
-  resolver.resolveStatements(statements);          // ✅ ADD THIS
+  const resolver = new Resolver(interpreter);
+  resolver.resolveStatements(statements);
+
+  if (resolver.hasError()) {      // ✅ ADD THIS CHECK
+    process.exit(65);              // ✅ ADD THIS
+  }                                 // ✅ ADD THIS
 
   interpreter.interpretStatements(statements);
 
