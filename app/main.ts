@@ -956,6 +956,7 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
   private interpreter: Interpreter;
   private scopes: Map<string, boolean>[] = [];
   private currentFunction: string = "none";
+  private currentClass: string = "none";
   private hadError: boolean = false;
 
   constructor(interpreter: Interpreter) {
@@ -1045,6 +1046,9 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
 
     this.currentClass = enclosingClass;
   }
+  visitExpressionStmt(stmt: Expression): void {
+  this.resolveExpr(stmt.expression);
+}
 
   visitIfStmt(stmt: If): void {
     this.resolveExpr(stmt.condition);
