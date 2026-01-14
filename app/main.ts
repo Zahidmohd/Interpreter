@@ -906,7 +906,7 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
 
   visitReturnStmt(stmt: Return): void {
     if (this.currentFunction === "none") {
-      // Error: return outside function
+      this.error(stmt.keyword, "Can't return from top-level code.");  // ✅ ADD THIS LINE
     }
     if (stmt.value !== null) {
       this.resolveExpr(stmt.value);
