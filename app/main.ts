@@ -44,6 +44,7 @@ interface ExprVisitor<R> {
   visitGetExpr(expr: Get): R;
   visitSetExpr(expr: Set): R;
   visitThisExpr(expr: This): R;
+  visitSuperExpr(expr: Super): R;
 }
 
 class Literal extends Expr {
@@ -103,6 +104,17 @@ class This extends Expr {
 
   accept<R>(visitor: ExprVisitor<R>): R {
     return visitor.visitThisExpr(this);
+  }
+}
+
+
+class Super extends Expr {
+  constructor(public keyword: Token, public method: Token) {
+    super();
+  }
+
+  accept<R>(visitor: ExprVisitor<R>): R {
+    return visitor.visitSuperExpr(this);
   }
 }
 
@@ -709,6 +721,13 @@ class Parser {
       return new This(this.previous());
     }
 
+    if (this.match("SUPER")) {  // ✅ ADD THIS BLOCK
+      const keyword = this.previous();
+      this.consume("DOT", "Expect '.' after 'super'.");
+      const method = this.consume("IDENTIFIER", "Expect superclass method name.");
+      return new Super(keyword, method);
+    }
+
     if (this.match("IDENTIFIER")) {
       return new Variable(this.previous());
     }
@@ -804,6 +823,8 @@ class LoxFunction implements LoxCallable {
   arity(): number {
     return this.declaration.params.length;
   }
+
+
   bind(instance: LoxInstance): LoxFunction {
     const environment = new Environment(this.closure);
     environment.define("this", instance);
@@ -1045,6 +1066,15 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     this.resolveLocal(expr, expr.keyword);
   }
 
+  visitSuperExpr(expr: Super): void {
+    if (this.currentClass === "none") {
+      this.error(expr.keyword, "Can't use 'super' outside of a class.");
+    } else if (this.currentClass !== "subclass") {
+      this.error(expr.keyword, "Can't use 'super' in a class with no superclass.");
+    }
+    this.resolveLocal(expr, expr.keyword);
+  }
+
   visitAssignExpr(expr: Assign): void {
     this.resolveExpr(expr.value);
     this.resolveLocal(expr, expr.name);
@@ -1064,6 +1094,7 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     this.define(stmt.name);
 
     if (stmt.superclass !== null) {
+      this.currentClass = "subclass";
       if (stmt.name.lexeme === stmt.superclass.name.lexeme) {
         this.error(stmt.superclass.name, "A class can't inherit from itself.");
       }
@@ -1372,6 +1403,22 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
 
   visitThisExpr(expr: This): any {
     return this.lookUpVariable(expr.keyword, expr);
+  }
+
+
+  visitSuperExpr(expr: Super): any {
+    const distance = this.locals.get(expr);
+    const superclass = this.environment.getAt(distance!, "super") as LoxClass;
+
+    const object = this.environment.getAt(distance! - 1, "this") as LoxInstance;
+
+    const method = superclass.findMethod(expr.method.lexeme);
+
+    if (method === null) {
+      throw new RuntimeError(expr.method, `Undefined property '${expr.method.lexeme}'.`);
+    }
+
+    return method.bind(object);
   }
 
   private lookUpVariable(name: Token, expr: Expr): any {
