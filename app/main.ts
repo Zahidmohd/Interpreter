@@ -41,6 +41,8 @@ interface ExprVisitor<R> {
   visitAssignExpr(expr: Assign): R;
   visitLogicalExpr(expr: Logical): R;
   visitCallExpr(expr: Call): R;
+  visitGetExpr(expr: Get): R;
+  visitSetExpr(expr: Set): R;
 }
 
 class Literal extends Expr {
@@ -124,6 +126,27 @@ class Call extends Expr {
 
   accept<R>(visitor: ExprVisitor<R>): R {
     return visitor.visitCallExpr(this);
+  }
+}
+
+
+class Get extends Expr {
+  constructor(public object: Expr, public name: Token) {
+    super();
+  }
+
+  accept<R>(visitor: ExprVisitor<R>): R {
+    return visitor.visitGetExpr(this);
+  }
+}
+
+class Set extends Expr {
+  constructor(public object: Expr, public name: Token, public value: Expr) {
+    super();
+  }
+
+  accept<R>(visitor: ExprVisitor<R>): R {
+    return visitor.visitSetExpr(this);
   }
 }
 
@@ -528,11 +551,13 @@ class Parser {
 
     if (this.match("EQUAL")) {
       const equals = this.previous();
-      const value = this.assignment(); // Right associative
+      const value = this.assignment();
 
       if (expr instanceof Variable) {
         const name = expr.name;
         return new Assign(name, value);
+      } else if (expr instanceof Get) {
+        return new Set(expr.object, expr.name, value);
       }
 
       this.error(equals, "Invalid assignment target.");
@@ -629,6 +654,9 @@ class Parser {
     while (true) {
       if (this.match("LEFT_PAREN")) {
         expr = this.finishCall(expr);
+      } else if (this.match("DOT")) {
+        const name = this.consume("IDENTIFIER", "Expect property name after '.'.");
+        expr = new Get(expr, name);
       } else {
         break;
       }
@@ -797,9 +825,22 @@ class LoxClass implements LoxCallable {
 
 class LoxInstance {
   private klass: LoxClass;
+  private fields: Map<string, any> = new Map();
 
   constructor(klass: LoxClass) {
     this.klass = klass;
+  }
+
+  get(name: Token): any {
+    if (this.fields.has(name.lexeme)) {
+      return this.fields.get(name.lexeme);
+    }
+
+    throw new RuntimeError(name, `Undefined property '${name.lexeme}'.`);
+  }
+
+  set(name: Token, value: any): void {
+    this.fields.set(name.lexeme, value);
   }
 
   toString(): string {
@@ -989,6 +1030,17 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
       this.resolveExpr(arg);
     }
   }
+
+  visitGetExpr(expr: Get): void {
+    this.resolveExpr(expr.object);
+  }
+
+  visitSetExpr(expr: Set): void {
+    this.resolveExpr(expr.value);
+    this.resolveExpr(expr.object);
+  }
+
+
 
   visitGroupingExpr(expr: Grouping): void {
     this.resolveExpr(expr.expression);
@@ -1239,6 +1291,27 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
 
     return func.call(this, args);
   }
+
+  visitGetExpr(expr: Get): any {
+  const object = this.evaluate(expr.object);
+  if (object instanceof LoxInstance) {
+    return object.get(expr.name);
+  }
+
+  throw new RuntimeError(expr.name, "Only instances have properties.");
+}
+
+visitSetExpr(expr: Set): any {
+  const object = this.evaluate(expr.object);
+
+  if (!(object instanceof LoxInstance)) {
+    throw new RuntimeError(expr.name, "Only instances have fields.");
+  }
+
+  const value = this.evaluate(expr.value);
+  object.set(expr.name, value);
+  return value;
+}
 
   private isCallable(value: any): boolean {
     return value && typeof value === "object" && "call" in value && "arity" in value;
