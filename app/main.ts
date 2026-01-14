@@ -790,6 +790,23 @@ class Environment {
 
     throw new RuntimeError(name, `Undefined variable '${name.lexeme}'.`);
   }
+  getAt(distance: number, name: string): any {
+    return this.ancestor(distance).values.get(name);
+  }
+
+  assignAt(distance: number, name: Token, value: any): void {
+    this.ancestor(distance).values.set(name.lexeme, value);
+  }
+
+  ancestor(distance: number): Environment {
+    let environment: Environment = this;
+    for (let i = 0; i < distance; i++) {
+      if (environment.enclosing) {
+        environment = environment.enclosing;
+      }
+    }
+    return environment;
+  }
 }
 
 class RuntimeError extends Error {
@@ -804,9 +821,173 @@ class ReturnException extends Error {
   }
 }
 
+class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
+  private interpreter: Interpreter;
+  private scopes: Map<string, boolean>[] = [];
+  private currentFunction: string = "none";
+
+  constructor(interpreter: Interpreter) {
+    this.interpreter = interpreter;
+  }
+
+  resolveStatements(statements: Stmt[]): void {
+    for (const statement of statements) {
+      this.resolveStmt(statement);
+    }
+  }
+
+  private resolveStmt(stmt: Stmt): void {
+    stmt.accept(this);
+  }
+
+  private resolveExpr(expr: Expr): void {
+    expr.accept(this);
+  }
+
+  visitBlockStmt(stmt: Block): void {
+    this.beginScope();
+    this.resolveStatements(stmt.statements);
+    this.endScope();
+  }
+
+  visitVarStmt(stmt: Var): void {
+    this.declare(stmt.name);
+    if (stmt.initializer !== null) {
+      this.resolveExpr(stmt.initializer);
+    }
+    this.define(stmt.name);
+  }
+
+  visitVariableExpr(expr: Variable): void {
+    if (this.scopes.length > 0) {
+      const scope = this.scopes[this.scopes.length - 1];
+      if (scope.has(expr.name.lexeme) && scope.get(expr.name.lexeme) === false) {
+        // Error: variable used in its own initializer
+      }
+    }
+    this.resolveLocal(expr, expr.name);
+  }
+
+  visitAssignExpr(expr: Assign): void {
+    this.resolveExpr(expr.value);
+    this.resolveLocal(expr, expr.name);
+  }
+
+  visitFunctionStmt(stmt: Function): void {
+    this.declare(stmt.name);
+    this.define(stmt.name);
+    this.resolveFunction(stmt, "function");
+  }
+
+  visitExpressionStmt(stmt: Expression): void {
+    this.resolveExpr(stmt.expression);
+  }
+
+  visitIfStmt(stmt: If): void {
+    this.resolveExpr(stmt.condition);
+    this.resolveStmt(stmt.thenBranch);
+    if (stmt.elseBranch !== null) {
+      this.resolveStmt(stmt.elseBranch);
+    }
+  }
+
+  visitPrintStmt(stmt: Print): void {
+    this.resolveExpr(stmt.expression);
+  }
+
+  visitReturnStmt(stmt: Return): void {
+    if (this.currentFunction === "none") {
+      // Error: return outside function
+    }
+    if (stmt.value !== null) {
+      this.resolveExpr(stmt.value);
+    }
+  }
+
+  visitWhileStmt(stmt: While): void {
+    this.resolveExpr(stmt.condition);
+    this.resolveStmt(stmt.body);
+  }
+
+  visitBinaryExpr(expr: Binary): void {
+    this.resolveExpr(expr.left);
+    this.resolveExpr(expr.right);
+  }
+
+  visitCallExpr(expr: Call): void {
+    this.resolveExpr(expr.callee);
+    for (const arg of expr.args) {
+      this.resolveExpr(arg);
+    }
+  }
+
+  visitGroupingExpr(expr: Grouping): void {
+    this.resolveExpr(expr.expression);
+  }
+
+  visitLiteralExpr(expr: Literal): void {
+    // Nothing to resolve
+  }
+
+  visitLogicalExpr(expr: Logical): void {
+    this.resolveExpr(expr.left);
+    this.resolveExpr(expr.right);
+  }
+
+  visitUnaryExpr(expr: Unary): void {
+    this.resolveExpr(expr.right);
+  }
+
+  private resolveFunction(func: Function, type: string): void {
+    const enclosingFunction = this.currentFunction;
+    this.currentFunction = type;
+
+    this.beginScope();
+    for (const param of func.params) {
+      this.declare(param);
+      this.define(param);
+    }
+    this.resolveStatements(func.body);
+    this.endScope();
+
+    this.currentFunction = enclosingFunction;
+  }
+
+  private beginScope(): void {
+    this.scopes.push(new Map<string, boolean>());
+  }
+
+  private endScope(): void {
+    this.scopes.pop();
+  }
+
+  private declare(name: Token): void {
+    if (this.scopes.length === 0) return;
+    const scope = this.scopes[this.scopes.length - 1];
+    scope.set(name.lexeme, false);
+  }
+
+  private define(name: Token): void {
+    if (this.scopes.length === 0) return;
+    const scope = this.scopes[this.scopes.length - 1];
+    scope.set(name.lexeme, true);
+  }
+
+  private resolveLocal(expr: Expr, name: Token): void {
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      if (this.scopes[i].has(name.lexeme)) {
+        this.interpreter.resolve(expr, this.scopes.length - 1 - i);
+        return;
+      }
+    }
+    // Not found. Assume it's global.
+  }
+}
+
 class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
   private hadRuntimeError: boolean = false;
   private globals: Environment = new Environment();
+  private locals: Map<Expr, number> = new Map();
   private environment: Environment = this.globals;
 
   constructor() {
@@ -911,17 +1092,35 @@ class Interpreter implements ExprVisitor<any>, StmtVisitor<void> {
     return this.hadRuntimeError;
   }
 
+  resolve(expr: Expr, depth: number): void {
+    this.locals.set(expr, depth);
+  }
+
   visitLiteralExpr(expr: Literal): any {
     return expr.value;
   }
 
   visitVariableExpr(expr: Variable): any {
-    return this.environment.get(expr.name);
+    return this.lookUpVariable(expr.name, expr);
+  }
+
+  private lookUpVariable(name: Token, expr: Expr): any {
+    const distance = this.locals.get(expr);
+    if (distance !== undefined) {
+      return this.environment.getAt(distance, name.lexeme);
+    } else {
+      return this.globals.get(name);
+    }
   }
 
   visitAssignExpr(expr: Assign): any {
     const value = this.evaluate(expr.value);
-    this.environment.assign(expr.name, value);
+    const distance = this.locals.get(expr);
+    if (distance !== undefined) {
+      this.environment.assignAt(distance, expr.name, value);
+    } else {
+      this.globals.assign(expr.name, value);
+    }
     return value;
   }
 
@@ -1355,6 +1554,10 @@ if (command === "tokenize") {
   }
 
   const interpreter = new Interpreter();
+
+  const resolver = new Resolver(interpreter);      // ✅ ADD THIS
+  resolver.resolveStatements(statements);          // ✅ ADD THIS
+
   interpreter.interpretStatements(statements);
 
   if (interpreter.hasRuntimeError()) {
