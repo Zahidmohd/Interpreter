@@ -1009,6 +1009,10 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
   }
 
   visitThisExpr(expr: This): void {
+    if (this.currentClass === "none") {
+      this.error(expr.keyword, "Can't use 'this' outside of a class.");
+      return;
+    }
     this.resolveLocal(expr, expr.keyword);
   }
 
@@ -1024,6 +1028,9 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
   }
 
   visitClassStmt(stmt: Class): void {
+    const enclosingClass = this.currentClass;
+    this.currentClass = "class";
+
     this.declare(stmt.name);
     this.define(stmt.name);
 
@@ -1035,9 +1042,8 @@ class Resolver implements ExprVisitor<void>, StmtVisitor<void> {
     }
 
     this.endScope();
-  }
-  visitExpressionStmt(stmt: Expression): void {
-    this.resolveExpr(stmt.expression);
+
+    this.currentClass = enclosingClass;
   }
 
   visitIfStmt(stmt: If): void {
